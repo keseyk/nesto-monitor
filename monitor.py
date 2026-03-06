@@ -8,26 +8,23 @@ SETUP:
 
 USAGE:
   python3 monitor.py
-
-CRON (runs every hour):
-  crontab -e
-  0 * * * * /usr/bin/python3 /Users/YOUR_NAME/Downloads/monitor.py >> /Users/YOUR_NAME/Downloads/monitor.log 2>&1
 """
 
 import random
 import time
 import sys
 import json
+import os
 import urllib.request
 import urllib.error
 from datetime import datetime
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
-URLS_FILE       = "urls.txt"       # your full list of URLs
-SAMPLE_SIZE     = 100              # how many URLs to check each run
-THRESHOLD_MS    = 800              # alert if average response time >= this
-SLACK_WEBHOOK   = "YOUR_SLACK_WEBHOOK_URL_HERE"  # paste your webhook here
-TIMEOUT_SECONDS = 10               # per-request timeout
+URLS_FILE       = "urls.txt"
+SAMPLE_SIZE     = 100
+THRESHOLD_MS    = 800
+SLACK_WEBHOOK   = os.environ.get("SLACK_WEBHOOK", "")  # set in GitHub Secrets
+TIMEOUT_SECONDS = 10
 # ──────────────────────────────────────────────────────────────────────────────
 
 
@@ -51,12 +48,12 @@ def measure(url):
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as r:
             r.read()
         return round((time.time() - start) * 1000)
-    except Exception as e:
-        return None  # timeout or error
+    except Exception:
+        return None
 
 
 def send_slack(avg_ms, slow_urls, sample_size, error_count):
-    if SLACK_WEBHOOK == "YOUR_SLACK_WEBHOOK_URL_HERE":
+    if not SLACK_WEBHOOK:
         print("⚠️   Slack webhook not set — skipping notification.")
         return
 
@@ -96,9 +93,8 @@ def main():
 
     print(f"🔍  Sampling {len(sample)} random URLs from {len(all_urls)} total...\n")
 
-    results     = []
-    errors      = []
-    slow_urls   = []
+    results   = []
+    errors    = []
 
     for i, url in enumerate(sample, 1):
         ms = measure(url)
@@ -117,10 +113,10 @@ def main():
         print("❌  All requests failed — check your connection.")
         sys.exit(1)
 
-    avg_ms      = round(sum(ms for _, ms in results) / len(results))
-    max_ms      = max(ms for _, ms in results)
-    min_ms      = min(ms for _, ms in results)
-    slow_urls   = sorted(results, key=lambda x: x[1], reverse=True)
+    avg_ms    = round(sum(ms for _, ms in results) / len(results))
+    max_ms    = max(ms for _, ms in results)
+    min_ms    = min(ms for _, ms in results)
+    slow_urls = sorted(results, key=lambda x: x[1], reverse=True)
 
     print(f"📊  Results:")
     print(f"    Avg: {avg_ms}ms  |  Min: {min_ms}ms  |  Max: {max_ms}ms")
